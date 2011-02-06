@@ -5,15 +5,20 @@ using System.Text;
 using xn;
 using System.Windows.Media.Imaging;
 using System.Windows;
+using System.Drawing.Drawing2D;
+using System.Drawing;
 
 namespace TrackingNI
 {
     public class SkeletonDraw
     {
+        private DepthGenerator depthGenerator;
+
         public void DrawStickFigure(ref WriteableBitmap image, DepthGenerator depthGenerator, DepthMetaData data, UserGenerator userGenerator)
         {
             Point3D corner = new Point3D(data.XRes, data.YRes, data.ZRes);
             corner = depthGenerator.ConvertProjectiveToRealWorld(corner);
+            this.depthGenerator = depthGenerator;
 
             int nXRes = data.XRes;
             int nYRes = data.YRes;
@@ -21,11 +26,11 @@ namespace TrackingNI
             uint[] users = userGenerator.GetUsers();
             foreach (uint user in users)
             {
-                Console.Write("Found User " + user);
+                //Console.Write("Found User " + user);
                 if (userGenerator.GetSkeletonCap().IsTracking(user))
                 {
                     Console.Write("Tracking User " + user);
-                    //DrawSingleUser(ref image, user, userGenerator, corner);
+                    DrawSingleUser(ref image, user, userGenerator, corner);
                 }
             }
         }
@@ -62,6 +67,7 @@ namespace TrackingNI
                                                (leftShoulder.position.Z + rightShoulder.position.Z) / 2);
             midShoulder.fConfidence = (leftShoulder.fConfidence + rightShoulder.fConfidence) / 2;
 
+            /*
             DrawStickPoint(ref image, neck, corner);
             DrawStickPoint(ref image, midShoulder, corner);
 
@@ -69,6 +75,7 @@ namespace TrackingNI
             {
                 DrawOrientation(ref image, id, userGenerator, joint, corner);
             }
+            */
         }
 
         public void DrawStickLine(ref WriteableBitmap image, uint id, UserGenerator userGenerator, SkeletonJoint first, SkeletonJoint second, Point3D corner)
@@ -92,8 +99,36 @@ namespace TrackingNI
                 }
             }
 
+            DrawTheLine(ref image, ref a, ref b);
+            /*
             DrawStickPoint(ref image, a, corner);
             DrawStickPoint(ref image, b, corner);
+            */
+        }
+
+        public void DrawTheLine(ref WriteableBitmap image, ref SkeletonJointPosition joint1, ref SkeletonJointPosition joint2)
+        {
+            image.Lock();
+
+            //Point3D point1 = depthGenerator.ConvertProjectiveToRealWorld(joint1.position);
+            //Point3D point2 = depthGenerator.ConvertProjectiveToRealWorld(joint2.position);
+
+            var b = new Bitmap(image.PixelWidth, image.PixelHeight, image.BackBufferStride, System.Drawing.Imaging.PixelFormat.Format24bppRgb,
+                image.BackBuffer);
+
+            using (var bitmapGraphics = System.Drawing.Graphics.FromImage(b))
+            {
+                bitmapGraphics.SmoothingMode = SmoothingMode.HighSpeed;
+                bitmapGraphics.InterpolationMode = InterpolationMode.NearestNeighbor;
+                bitmapGraphics.CompositingMode = CompositingMode.SourceCopy;
+                bitmapGraphics.CompositingQuality = CompositingQuality.HighSpeed;
+                //bitmapGraphics.DrawLine(Pens.Gold, (point1.X+640)/2, (point1.Y+480)/2,(point2.X+640)/2,(point2.Y+480)/2);
+                bitmapGraphics.DrawLine(Pens.BlueViolet, (joint1.position.X + 640) / 2, 480 - (joint1.position.Y + 480) / 2, (joint2.position.X + 640) / 2, 480 - (joint2.position.Y + 480) / 2);
+                bitmapGraphics.Dispose();
+            }
+            image.AddDirtyRect(new Int32Rect(0, 0, image.PixelWidth, image.PixelHeight));
+            image.Unlock();
+
         }
 
         public void DrawStickPoint(ref WriteableBitmap image, SkeletonJointPosition joint, Point3D corner)
@@ -110,9 +145,11 @@ namespace TrackingNI
                              0, 0, 255, 0, };
 
             image.Lock();
-            image.WritePixels(new Int32Rect(Convert.ToInt32(joint.position.X - 1),
+        
+            image.WritePixels(new Int32Rect(Convert.ToInt32(joint.position.X- 1),
                                             Convert.ToInt32(joint.position.Y - 1),
                                             3, 3), point, 4, 0);
+      
             image.Unlock();
         }
 

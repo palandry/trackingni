@@ -36,6 +36,9 @@ namespace TrackingNI
         private ImageMetaData imageData;
         private DepthMetaData depthData;
 
+        private PoseDetectionCapability poseDetectionCapability;
+        private SkeletonCapability skeletonCapability;
+
         private SkeletonDraw skeletonDraw;
 
         private int[] Histogram { get; set; }
@@ -111,6 +114,9 @@ namespace TrackingNI
             depthGenerator = new DepthGenerator(context);
             userGenerator = new UserGenerator(context);
 
+            poseDetectionCapability = userGenerator.GetPoseDetectionCap();
+            skeletonCapability = userGenerator.GetSkeletonCap();
+
             MapOutputMode mapMode = depthGenerator.GetMapOutputMode();
 
             int width = (int)mapMode.nXRes;
@@ -148,7 +154,7 @@ namespace TrackingNI
 
         private void NewUser(ProductionNode node, uint id)
         {
-            userGenerator.GetPoseDetectionCap().StartPoseDetection("Psi", id);
+            userGenerator.GetPoseDetectionCap().StartPoseDetection(userGenerator.GetSkeletonCap().GetCalibrationPose(), id);
             Console.Write(id + " Found new user");
         }
 
@@ -165,13 +171,22 @@ namespace TrackingNI
         private void CalibrationEnd(ProductionNode node, uint id, bool success)
         {
             Console.Write(id + " Calibration ended " + (success ? "successfully" : "unsuccessfully"));
+            if (success)
+            {
+                userGenerator.GetSkeletonCap().StartTracking(id);
+                //this.joints.Add(id, new Dictionary<SkeletonJoint, SkeletonJointPosition>());
+            }
+            else
+            {
+                userGenerator.GetPoseDetectionCap().StartPoseDetection(userGenerator.GetSkeletonCap().GetCalibrationPose(), id);
+            }
         }
 
         private void PoseDetected(ProductionNode node, string pose, uint id)
         {
             Console.Write(id + " Detected pose " + pose);
-            userGenerator.GetSkeletonCap().RequestCalibration(id, false);
             userGenerator.GetPoseDetectionCap().StopPoseDetection(id);
+            userGenerator.GetSkeletonCap().RequestCalibration(id, false);
         }
 
         private void PoseEnded(ProductionNode node, string pose, uint id)
@@ -187,8 +202,10 @@ namespace TrackingNI
             {
                 try
                 {
-                    context.WaitAndUpdateAll();
-
+                    unsafe
+                    {
+                        context.WaitAndUpdateAll();
+                    }
                     imageGenerator.GetMetaData(imageData);
                     depthGenerator.GetMetaData(depthData);
                 }
