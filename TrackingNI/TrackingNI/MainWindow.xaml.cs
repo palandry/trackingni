@@ -33,6 +33,7 @@ namespace TrackingNI
 
         private WriteableBitmap imageBitmap;
         private WriteableBitmap depthBitmap;
+        private WriteableBitmap depthBitmapCorrected;
         private ImageMetaData imageData;
         private DepthMetaData depthData;
 
@@ -82,11 +83,6 @@ namespace TrackingNI
                             {
                                 byte pixel = (byte)Histogram[*pDepth];
 
-                                if (pixel == 0)
-                                {
-                                    //pixel = 255;
-                                }
-
                                 pDest[0] = pixel;
                                 pDest[1] = pixel;
                                 pDest[2] = pixel;
@@ -98,9 +94,48 @@ namespace TrackingNI
                     depthBitmap.Unlock();
                 }
 
+                //DepthCorrection.Fix(ref depthBitmap, depthData.XRes, depthData.YRes);
                 skeletonDraw.DrawStickFigure(ref depthBitmap, depthGenerator, depthData, userGenerator);
 
                 return depthBitmap;
+            }
+        }
+
+        public ImageSource DepthImageSourceCorrected
+        {
+            get
+            {
+                if (depthBitmapCorrected != null)
+                {
+                    UpdateHistogram(depthData);
+
+                    depthBitmapCorrected.Lock();
+
+                    unsafe
+                    {
+                        ushort* pDepth = (ushort*)depthGenerator.GetDepthMapPtr().ToPointer();
+                        for (int y = 0; y < depthData.YRes; ++y)
+                        {
+                            byte* pDest = (byte*)depthBitmapCorrected.BackBuffer.ToPointer() + y * depthBitmapCorrected.BackBufferStride;
+                            for (int x = 0; x < depthData.XRes; ++x, ++pDepth, pDest += 3)
+                            {
+                                byte pixel = (byte)Histogram[*pDepth];
+
+                                pDest[0] = pixel;
+                                pDest[1] = pixel;
+                                pDest[2] = pixel;
+                            }
+                        }
+                    }
+
+                    depthBitmapCorrected.AddDirtyRect(new Int32Rect(0, 0, depthData.XRes, depthData.YRes));
+                    depthBitmapCorrected.Unlock();
+                }
+
+                DepthCorrection.Fix(ref depthBitmapCorrected, depthData.XRes, depthData.YRes);
+                skeletonDraw.DrawStickFigure(ref depthBitmapCorrected, depthGenerator, depthData, userGenerator);
+
+                return depthBitmapCorrected;
             }
         }
 
@@ -130,6 +165,7 @@ namespace TrackingNI
 
             imageBitmap = new WriteableBitmap(width, height, DPI_X, DPI_Y, PixelFormats.Rgb24, null);
             depthBitmap = new WriteableBitmap(width, height, DPI_X, DPI_Y, PixelFormats.Rgb24, null);
+            depthBitmapCorrected = new WriteableBitmap(width, height, DPI_X, DPI_Y, PixelFormats.Rgb24, null);
             imageData = new ImageMetaData();
             depthData = new DepthMetaData();
 
@@ -233,8 +269,9 @@ namespace TrackingNI
         {
             Dispatcher.BeginInvoke((Action)delegate
             {
-                imgRaw.Source = RawImageSource;
-                imgDepth.Source = DepthImageSource;
+                //imgRaw.Source = RawImageSource;
+                imgRaw.Source = DepthImageSource;
+                imgDepth.Source = DepthImageSourceCorrected;
             });
         }
 
