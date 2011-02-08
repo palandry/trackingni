@@ -66,6 +66,7 @@
     <Compile Include="Console.xaml.cs">
       <DependentUpon>Console.xaml</DependentUpon>
     </Compile>
+    <Compile Include="DepthCorrection.cs" />
     <Compile Include="SkeletonDraw.cs" />
     <Page Include="Console.xaml">
       <SubType>Designer</SubType>
