@@ -81,6 +81,12 @@ namespace TrackingNI
                             for (int x = 0; x < depthData.XRes; ++x, ++pDepth, pDest += 3)
                             {
                                 byte pixel = (byte)Histogram[*pDepth];
+
+                                if (pixel == 0)
+                                {
+                                    //pixel = 255;
+                                }
+
                                 pDest[0] = pixel;
                                 pDest[1] = pixel;
                                 pDest[2] = pixel;
@@ -107,7 +113,7 @@ namespace TrackingNI
             console.Top = 0;
             console.Left = 0;
 
-            Console.Write("TrackingNI by Richard Pianka");
+            Console.Write("TrackingNI by Richard Pianka and Ramsey Abouzahra");
 
             context = new Context(CONFIG_FILE);
             imageGenerator = new ImageGenerator(context);
@@ -142,12 +148,19 @@ namespace TrackingNI
             userGenerator.NewUser += new xn.UserGenerator.NewUserHandler(NewUser);
             userGenerator.LostUser += new xn.UserGenerator.LostUserHandler(LostUser);
 
+            /*
             userGenerator.GetSkeletonCap().CalibrationStart += new SkeletonCapability.CalibrationStartHandler(CalibrationStart);
             userGenerator.GetSkeletonCap().CalibrationEnd += new SkeletonCapability.CalibrationEndHandler(CalibrationEnd);
             userGenerator.GetSkeletonCap().SetSkeletonProfile(SkeletonProfile.All);
             userGenerator.GetPoseDetectionCap().PoseDetected += new PoseDetectionCapability.PoseDetectedHandler(PoseDetected);
             userGenerator.GetPoseDetectionCap().PoseEnded += new PoseDetectionCapability.PoseEndedHandler(PoseEnded);
+            */
 
+            skeletonCapability.CalibrationStart += new SkeletonCapability.CalibrationStartHandler(CalibrationStart);
+            skeletonCapability.CalibrationEnd += new SkeletonCapability.CalibrationEndHandler(CalibrationEnd);
+            skeletonCapability.SetSkeletonProfile(SkeletonProfile.All);
+            poseDetectionCapability.PoseDetected += new PoseDetectionCapability.PoseDetectedHandler(PoseDetected);
+            poseDetectionCapability.PoseEnded += new PoseDetectionCapability.PoseEndedHandler(PoseEnded);
             reader.Start();
             worker.DoWork += new DoWorkEventHandler(WorkerTick);
         }

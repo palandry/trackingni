@@ -3,6 +3,11 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="TrackingNI" Height="540" Width="1336" ResizeMode="NoResize">
     <Grid>
+        <!--
+        <TextBox Name="Scalar"/>
+        <TextBox Name="XOffset"/>
+        <TextBox Name="YOffset"/>
+        -->
         <Image Height="480" Margin="10,10,664,11" MinHeight="480" MinWidth="640" Name="imgRaw" Width="640" />
         <Image Height="480" Margin="656,10,18,11" MinHeight="480" MinWidth="640" Name="imgDepth" Width="640" />
     </Grid>
