@@ -48,6 +48,173 @@ namespace TrackingNI
         private BackgroundWorker worker;
         private bool stop;
 
+        public MainWindow()
+        {
+            InitializeComponent();
+
+            console = new Console();
+            console.Show();
+            console.Top = 0;
+            console.Left = 0;
+
+            Console.Write("TrackingNI by Richard Pianka and Ramsey Abouzahra");
+
+            context = new Context(CONFIG_FILE);
+            imageGenerator = new ImageGenerator(context);
+            depthGenerator = new DepthGenerator(context);
+            userGenerator = new UserGenerator(context);
+
+            poseDetectionCapability = userGenerator.GetPoseDetectionCap();
+            skeletonCapability = userGenerator.GetSkeletonCap();
+
+            MapOutputMode mapMode = depthGenerator.GetMapOutputMode();
+
+            int width = (int)mapMode.nXRes;
+            int height = (int)mapMode.nYRes;
+
+            imageBitmap = new WriteableBitmap(width, height, DPI_X, DPI_Y, PixelFormats.Rgb24, null);
+            depthBitmap = new WriteableBitmap(width, height, DPI_X, DPI_Y, PixelFormats.Rgb24, null);
+            depthBitmapCorrected = new WriteableBitmap(width, height, DPI_X, DPI_Y, PixelFormats.Rgb24, null);
+            imageData = new ImageMetaData();
+            depthData = new DepthMetaData();
+
+            skeletonDraw = new SkeletonDraw();
+
+            Histogram = new int[depthGenerator.GetDeviceMaxDepth()];
+
+            reader = new Thread(new ThreadStart(Reader));
+            reader.IsBackground = true;
+            worker = new BackgroundWorker();
+            stop = false;
+
+            CompositionTarget.Rendering += new EventHandler(Worker);
+            Closing += new System.ComponentModel.CancelEventHandler(MainWindow_Closing);
+
+            userGenerator.NewUser += new xn.UserGenerator.NewUserHandler(NewUser);
+            userGenerator.LostUser += new xn.UserGenerator.LostUserHandler(LostUser);
+
+            skeletonCapability.CalibrationStart += new SkeletonCapability.CalibrationStartHandler(CalibrationStart);
+            skeletonCapability.CalibrationEnd += new SkeletonCapability.CalibrationEndHandler(CalibrationEnd);
+            skeletonCapability.SetSkeletonProfile(SkeletonProfile.All);
+            poseDetectionCapability.PoseDetected += new PoseDetectionCapability.PoseDetectedHandler(PoseDetected);
+            poseDetectionCapability.PoseEnded += new PoseDetectionCapability.PoseEndedHandler(PoseEnded);
+            reader.Start();
+            worker.DoWork += new DoWorkEventHandler(WorkerTick);
+        }
+
+        private void NewUser(ProductionNode node, uint id)
+        {
+            userGenerator.GetPoseDetectionCap().StartPoseDetection(userGenerator.GetSkeletonCap().GetCalibrationPose(), id);
+            Console.Write(id + " Found new user");
+        }
+
+        private void LostUser(ProductionNode node, uint id)
+        {
+            Console.Write(id + " Lost user");
+        }
+
+        private void CalibrationStart(ProductionNode node, uint id)
+        {
+            Console.Write(id + " Calibration start");
+        }
+
+        private void CalibrationEnd(ProductionNode node, uint id, bool success)
+        {
+            Console.Write(id + " Calibration ended " + (success ? "successfully" : "unsuccessfully"));
+            if (success)
+            {
+                userGenerator.GetSkeletonCap().StartTracking(id);
+            }
+            else
+            {
+                userGenerator.GetPoseDetectionCap().StartPoseDetection(userGenerator.GetSkeletonCap().GetCalibrationPose(), id);
+            }
+        }
+
+        private void PoseDetected(ProductionNode node, string pose, uint id)
+        {
+            Console.Write(id + " Detected pose " + pose);
+            userGenerator.GetPoseDetectionCap().StopPoseDetection(id);
+            userGenerator.GetSkeletonCap().RequestCalibration(id, false);
+        }
+
+        private void PoseEnded(ProductionNode node, string pose, uint id)
+        {
+            Console.Write(id + " Lost Pose " + pose);
+        }
+
+        private void Reader()
+        {
+            while (!stop)
+            {
+                try
+                {
+                    context.WaitAndUpdateAll();
+                    imageGenerator.GetMetaData(imageData);
+                    depthGenerator.GetMetaData(depthData);
+                }
+                catch (Exception) { }
+            }
+        }
+
+        private void WorkerTick(object sender, DoWorkEventArgs e)
+        {
+            Dispatcher.BeginInvoke((Action)delegate
+            {
+                imgRaw.Source = DepthImageSource;
+                imgDepth.Source = DepthImageSourceCorrected;
+            });
+        }
+
+        private void Worker(object sender, EventArgs e)
+        {
+            if (!worker.IsBusy)
+            {
+                worker.RunWorkerAsync();
+            }
+        }
+
+        private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            stop = true;
+        }
+
+        // thanks to Vangos Pterneas for these functions
+        public unsafe void UpdateHistogram(DepthMetaData depthMD)
+        {
+            for (int i = 0; i < Histogram.Length; ++i)
+                Histogram[i] = 0;
+
+            ushort* pDepth = (ushort*)depthMD.DepthMapPtr.ToPointer();
+
+            int points = 0;
+            for (int y = 0; y < depthMD.YRes; ++y)
+            {
+                for (int x = 0; x < depthMD.XRes; ++x, ++pDepth)
+                {
+                    ushort depthVal = *pDepth;
+                    if (depthVal != 0)
+                    {
+                        Histogram[depthVal]++;
+                        points++;
+                    }
+                }
+            }
+
+            for (int i = 1; i < Histogram.Length; i++)
+            {
+                Histogram[i] += Histogram[i - 1];
+            }
+
+            if (points > 0)
+            {
+                for (int i = 1; i < Histogram.Length; i++)
+                {
+                    Histogram[i] = (int)(256 * (1.0f - (Histogram[i] / (float)points)));
+                }
+            }
+        }
+
         public ImageSource RawImageSource
         {
             get
@@ -136,191 +303,6 @@ namespace TrackingNI
                 skeletonDraw.DrawStickFigure(ref depthBitmapCorrected, depthGenerator, depthData, userGenerator);
 
                 return depthBitmapCorrected;
-            }
-        }
-
-        public MainWindow()
-        {
-            InitializeComponent();
-
-            console = new Console();
-            console.Show();
-            console.Top = 0;
-            console.Left = 0;
-
-            Console.Write("TrackingNI by Richard Pianka and Ramsey Abouzahra");
-
-            context = new Context(CONFIG_FILE);
-            imageGenerator = new ImageGenerator(context);
-            depthGenerator = new DepthGenerator(context);
-            userGenerator = new UserGenerator(context);
-
-            poseDetectionCapability = userGenerator.GetPoseDetectionCap();
-            skeletonCapability = userGenerator.GetSkeletonCap();
-
-            MapOutputMode mapMode = depthGenerator.GetMapOutputMode();
-
-            int width = (int)mapMode.nXRes;
-            int height = (int)mapMode.nYRes;
-
-            imageBitmap = new WriteableBitmap(width, height, DPI_X, DPI_Y, PixelFormats.Rgb24, null);
-            depthBitmap = new WriteableBitmap(width, height, DPI_X, DPI_Y, PixelFormats.Rgb24, null);
-            depthBitmapCorrected = new WriteableBitmap(width, height, DPI_X, DPI_Y, PixelFormats.Rgb24, null);
-            imageData = new ImageMetaData();
-            depthData = new DepthMetaData();
-
-            skeletonDraw = new SkeletonDraw();
-
-            Histogram = new int[depthGenerator.GetDeviceMaxDepth()];
-
-            reader = new Thread(new ThreadStart(Reader));
-            reader.IsBackground = true;
-            worker = new BackgroundWorker();
-            stop = false;
-
-            CompositionTarget.Rendering += new EventHandler(Worker);
-            Closing += new System.ComponentModel.CancelEventHandler(MainWindow_Closing);
-
-            userGenerator.NewUser += new xn.UserGenerator.NewUserHandler(NewUser);
-            userGenerator.LostUser += new xn.UserGenerator.LostUserHandler(LostUser);
-
-            /*
-            userGenerator.GetSkeletonCap().CalibrationStart += new SkeletonCapability.CalibrationStartHandler(CalibrationStart);
-            userGenerator.GetSkeletonCap().CalibrationEnd += new SkeletonCapability.CalibrationEndHandler(CalibrationEnd);
-            userGenerator.GetSkeletonCap().SetSkeletonProfile(SkeletonProfile.All);
-            userGenerator.GetPoseDetectionCap().PoseDetected += new PoseDetectionCapability.PoseDetectedHandler(PoseDetected);
-            userGenerator.GetPoseDetectionCap().PoseEnded += new PoseDetectionCapability.PoseEndedHandler(PoseEnded);
-            */
-
-            skeletonCapability.CalibrationStart += new SkeletonCapability.CalibrationStartHandler(CalibrationStart);
-            skeletonCapability.CalibrationEnd += new SkeletonCapability.CalibrationEndHandler(CalibrationEnd);
-            skeletonCapability.SetSkeletonProfile(SkeletonProfile.All);
-            poseDetectionCapability.PoseDetected += new PoseDetectionCapability.PoseDetectedHandler(PoseDetected);
-            poseDetectionCapability.PoseEnded += new PoseDetectionCapability.PoseEndedHandler(PoseEnded);
-            reader.Start();
-            worker.DoWork += new DoWorkEventHandler(WorkerTick);
-        }
-
-        private void NewUser(ProductionNode node, uint id)
-        {
-            userGenerator.GetPoseDetectionCap().StartPoseDetection(userGenerator.GetSkeletonCap().GetCalibrationPose(), id);
-            Console.Write(id + " Found new user");
-        }
-
-        private void LostUser(ProductionNode node, uint id)
-        {
-            Console.Write(id + " Lost user");
-        }
-
-        private void CalibrationStart(ProductionNode node, uint id)
-        {
-            Console.Write(id + " Calibration start");
-        }
-
-        private void CalibrationEnd(ProductionNode node, uint id, bool success)
-        {
-            Console.Write(id + " Calibration ended " + (success ? "successfully" : "unsuccessfully"));
-            if (success)
-            {
-                userGenerator.GetSkeletonCap().StartTracking(id);
-                //this.joints.Add(id, new Dictionary<SkeletonJoint, SkeletonJointPosition>());
-            }
-            else
-            {
-                userGenerator.GetPoseDetectionCap().StartPoseDetection(userGenerator.GetSkeletonCap().GetCalibrationPose(), id);
-            }
-        }
-
-        private void PoseDetected(ProductionNode node, string pose, uint id)
-        {
-            Console.Write(id + " Detected pose " + pose);
-            userGenerator.GetPoseDetectionCap().StopPoseDetection(id);
-            userGenerator.GetSkeletonCap().RequestCalibration(id, false);
-        }
-
-        private void PoseEnded(ProductionNode node, string pose, uint id)
-        {
-            Console.Write(id + " Lost Pose " + pose);
-        }
-
-        private void Reader()
-        {
-            //context.StartGeneratingAll();
-
-            while (!stop)
-            {
-                try
-                {
-                    unsafe
-                    {
-                        context.WaitAndUpdateAll();
-                    }
-                    imageGenerator.GetMetaData(imageData);
-                    depthGenerator.GetMetaData(depthData);
-                }
-                catch (Exception)
-                {
-
-                }
-            }
-        }
-
-        private void WorkerTick(object sender, DoWorkEventArgs e)
-        {
-            Dispatcher.BeginInvoke((Action)delegate
-            {
-                //imgRaw.Source = RawImageSource;
-                imgRaw.Source = DepthImageSource;
-                imgDepth.Source = DepthImageSourceCorrected;
-            });
-        }
-
-        private void Worker(object sender, EventArgs e)
-        {
-            if (!worker.IsBusy)
-            {
-                worker.RunWorkerAsync();
-            }
-        }
-
-        private void MainWindow_Closing(object sender, System.ComponentModel.CancelEventArgs e)
-        {
-            stop = true;
-        }
-
-        public unsafe void UpdateHistogram(DepthMetaData depthMD)
-        {
-            // Reset.
-            for (int i = 0; i < Histogram.Length; ++i)
-                Histogram[i] = 0;
-
-            ushort* pDepth = (ushort*)depthMD.DepthMapPtr.ToPointer();
-
-            int points = 0;
-            for (int y = 0; y < depthMD.YRes; ++y)
-            {
-                for (int x = 0; x < depthMD.XRes; ++x, ++pDepth)
-                {
-                    ushort depthVal = *pDepth;
-                    if (depthVal != 0)
-                    {
-                        Histogram[depthVal]++;
-                        points++;
-                    }
-                }
-            }
-
-            for (int i = 1; i < Histogram.Length; i++)
-            {
-                Histogram[i] += Histogram[i - 1];
-            }
-
-            if (points > 0)
-            {
-                for (int i = 1; i < Histogram.Length; i++)
-                {
-                    Histogram[i] = (int)(256 * (1.0f - (Histogram[i] / (float)points)));
-                }
             }
         }
     }

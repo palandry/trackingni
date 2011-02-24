@@ -26,10 +26,8 @@ namespace TrackingNI
             uint[] users = userGenerator.GetUsers();
             foreach (uint user in users)
             {
-                //Console.Write("Found User " + user);
                 if (userGenerator.GetSkeletonCap().IsTracking(user))
                 {
-                    //Console.Write("Tracking User " + user);
                     DrawSingleUser(ref image, user, userGenerator, corner);
                 }
             }
@@ -68,15 +66,6 @@ namespace TrackingNI
                                                (leftShoulder.position.Y + rightShoulder.position.Y) / 2,
                                                (leftShoulder.position.Z + rightShoulder.position.Z) / 2);
             midShoulder.fConfidence = (leftShoulder.fConfidence + rightShoulder.fConfidence) / 2;
-            /*
-            DrawStickPoint(ref image, neck, corner);
-            DrawStickPoint(ref image, midShoulder, corner);
-
-            foreach (SkeletonJoint joint in Enum.GetValues(typeof(SkeletonJoint)))
-            {
-                DrawOrientation(ref image, id, userGenerator, joint, corner);
-            }
-            */
         }
 
         public void DrawStickLine(ref WriteableBitmap image, uint id, UserGenerator userGenerator, SkeletonJoint first, SkeletonJoint second, Point3D corner)
@@ -101,10 +90,6 @@ namespace TrackingNI
             }
 
             DrawTheLine(ref image, ref a, ref b);
-            /*
-            DrawStickPoint(ref image, a, corner);
-            DrawStickPoint(ref image, b, corner);
-            */
         }
 
         public void DrawTheLine(ref WriteableBitmap image, ref SkeletonJointPosition joint1, ref SkeletonJointPosition joint2)
@@ -121,14 +106,13 @@ namespace TrackingNI
                 bitmapGraphics.CompositingMode = CompositingMode.SourceCopy;
                 bitmapGraphics.CompositingQuality = CompositingQuality.HighSpeed;
 
-                // Convert skeletal joint coordinates and display line between joints
                 int[] joint1Coord = ConvertCoord(joint1, 0);
                 int[] joint2Coord = ConvertCoord(joint2, 0);
-                bitmapGraphics.DrawLine(Pens.BlueViolet, joint1Coord[0], joint1Coord[1], joint2Coord[0], joint2Coord[1]);
 
-                //bitmapGraphics.DrawLine(Pens.BlueViolet, (joint1.position.X + 640) / 2, 480 - (joint1.position.Y + 480) / 2, (joint2.position.X + 640) / 2, 480 - (joint2.position.Y + 480) / 2);
+                bitmapGraphics.DrawLine(Pens.BlueViolet, joint1Coord[0], joint1Coord[1], joint2Coord[0], joint2Coord[1]);
                 bitmapGraphics.Dispose();
             }
+
             image.AddDirtyRect(new Int32Rect(0, 0, image.PixelWidth, image.PixelHeight));
             image.Unlock();
         }
@@ -136,6 +120,7 @@ namespace TrackingNI
         public void DrawHeadAndHands(ref WriteableBitmap image, uint id, UserGenerator userGenerator, DepthGenerator depthGenerator) 
         {
             int headSize = 40; int handSize = 20;
+
             SkeletonJointPosition head = new SkeletonJointPosition();
             SkeletonJointPosition leftHand = new SkeletonJointPosition();
             SkeletonJointPosition rightHand = new SkeletonJointPosition();
@@ -155,17 +140,11 @@ namespace TrackingNI
                 bitmapGraphics.InterpolationMode = InterpolationMode.NearestNeighbor;
                 bitmapGraphics.CompositingMode = CompositingMode.SourceCopy;
                 bitmapGraphics.CompositingQuality = CompositingQuality.HighSpeed;
+
                 int[] headCoord = ConvertCoord(head, -headSize/2);
                 int[] leftHandCoord = ConvertCoord(leftHand, -handSize/2);
                 int[] rightHandCoord = ConvertCoord(rightHand, -handSize/2);
                 
-                /*
-                Point3D point = depthGenerator.ConvertProjectiveToRealWorld(rightHand.position);
-                Console.Write("rightHandRaw(" + rightHand.position.X + "," + rightHand.position.Y + ")");
-                Console.Write("rightHandProjected(" + point.X + "," + point.Y + ")");
-                Console.Write("rightHandConverted(" + rightHandCoord[0] + "," + rightHandCoord[1] + ")");
-                */
-
                 bitmapGraphics.DrawEllipse(Pens.BlueViolet, headCoord[0], headCoord[1], headSize, headSize);
                 bitmapGraphics.DrawEllipse(Pens.BlueViolet, leftHandCoord[0], leftHandCoord[1], handSize, handSize);
                 bitmapGraphics.DrawEllipse(Pens.BlueViolet, rightHandCoord[0], rightHandCoord[1], handSize, handSize);
@@ -185,7 +164,6 @@ namespace TrackingNI
 
         public void DrawStickPoint(ref WriteableBitmap image, SkeletonJointPosition joint, Point3D corner)
         {
-            //Console.WriteLine(joint.position.X + " " + joint.position.Y + " " + joint.position.Z);
             byte[] point = { 0, 0, 255, 0,
                              0, 0, 255, 0,
                              0, 0, 255, 0,
@@ -197,11 +175,9 @@ namespace TrackingNI
                              0, 0, 255, 0, };
 
             image.Lock();
-        
             image.WritePixels(new Int32Rect(Convert.ToInt32(joint.position.X- 1),
                                             Convert.ToInt32(joint.position.Y - 1),
                                             3, 3), point, 4, 0);
-      
             image.Unlock();
         }
 
@@ -226,31 +202,22 @@ namespace TrackingNI
             v2.position = new Point3D(v1.position.X + 100 * orientation.Orientation.elements[0],
                                       v1.position.Y + 100 * orientation.Orientation.elements[3],
                                       v1.position.Z + 100 * orientation.Orientation.elements[6]);
-            DrawTheLine(ref image, ref v1, ref v2);
-            /*
-            DrawStickPoint(ref image, v1, corner);
-            DrawStickPoint(ref image, v2, corner);
-            */
 
+            DrawTheLine(ref image, ref v1, ref v2);
+            
             v1.position = position.position;
             v2.position = new Point3D(v1.position.X + 100 * orientation.Orientation.elements[1],
                                       v1.position.Y + 100 * orientation.Orientation.elements[4],
                                       v1.position.Z + 100 * orientation.Orientation.elements[7]);
-            DrawTheLine(ref image, ref v1, ref v2);
-            /*
-            DrawStickPoint(ref image, v1, corner);
-            DrawStickPoint(ref image, v2, corner);
-            */
 
+            DrawTheLine(ref image, ref v1, ref v2);
+            
             v1.position = position.position;
             v2.position = new Point3D(v1.position.X + 100 * orientation.Orientation.elements[2],
                                       v1.position.Y + 100 * orientation.Orientation.elements[5],
                                       v1.position.Z + 100 * orientation.Orientation.elements[8]);
+
             DrawTheLine(ref image, ref v1, ref v2);
-            /*
-            DrawStickPoint(ref image, v1, corner);
-            DrawStickPoint(ref image, v2, corner);
-            */
         }
     }
 }
