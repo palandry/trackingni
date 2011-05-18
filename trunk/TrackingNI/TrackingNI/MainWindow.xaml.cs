@@ -12,9 +12,8 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
-using xn;
-using xnv;
 using System.ComponentModel;
+using OpenNI;
 
 namespace TrackingNI
 {
@@ -64,13 +63,13 @@ namespace TrackingNI
             depthGenerator = new DepthGenerator(context);
             userGenerator = new UserGenerator(context);
 
-            poseDetectionCapability = userGenerator.GetPoseDetectionCap();
-            skeletonCapability = userGenerator.GetSkeletonCap();
+            poseDetectionCapability = userGenerator.PoseDetectionCapability;
+            skeletonCapability = userGenerator.SkeletonCapability;
 
-            MapOutputMode mapMode = depthGenerator.GetMapOutputMode();
+            MapOutputMode mapMode = depthGenerator.MapOutputMode;
 
-            int width = (int)mapMode.nXRes;
-            int height = (int)mapMode.nYRes;
+            int width = (int)mapMode.XRes;
+            int height = (int)mapMode.YRes;
 
             imageBitmap = new WriteableBitmap(width, height, DPI_X, DPI_Y, PixelFormats.Rgb24, null);
             depthBitmap = new WriteableBitmap(width, height, DPI_X, DPI_Y, PixelFormats.Rgb24, null);
@@ -80,7 +79,7 @@ namespace TrackingNI
 
             skeletonDraw = new SkeletonDraw();
 
-            Histogram = new int[depthGenerator.GetDeviceMaxDepth()];
+            Histogram = new int[depthGenerator.DeviceMaxDepth];
 
             reader = new Thread(new ThreadStart(Reader));
             reader.IsBackground = true;
@@ -90,57 +89,57 @@ namespace TrackingNI
             CompositionTarget.Rendering += new EventHandler(Worker);
             Closing += new System.ComponentModel.CancelEventHandler(MainWindow_Closing);
 
-            userGenerator.NewUser += new xn.UserGenerator.NewUserHandler(NewUser);
-            userGenerator.LostUser += new xn.UserGenerator.LostUserHandler(LostUser);
+            userGenerator.NewUser += new EventHandler<NewUserEventArgs>(NewUser);
+            userGenerator.LostUser += new EventHandler<UserLostEventArgs>(LostUser);
 
-            skeletonCapability.CalibrationStart += new SkeletonCapability.CalibrationStartHandler(CalibrationStart);
-            skeletonCapability.CalibrationEnd += new SkeletonCapability.CalibrationEndHandler(CalibrationEnd);
+            skeletonCapability.CalibrationStart += new EventHandler<CalibrationStartEventArgs>(CalibrationStart);
+            skeletonCapability.CalibrationEnd += new EventHandler<CalibrationEndEventArgs>(CalibrationEnd);
             skeletonCapability.SetSkeletonProfile(SkeletonProfile.All);
-            poseDetectionCapability.PoseDetected += new PoseDetectionCapability.PoseDetectedHandler(PoseDetected);
-            poseDetectionCapability.PoseEnded += new PoseDetectionCapability.PoseEndedHandler(PoseEnded);
+            poseDetectionCapability.PoseDetected += new EventHandler<PoseDetectedEventArgs>(PoseDetected);
+            poseDetectionCapability.PoseEnded += new EventHandler<PoseEndedEventArgs>(PoseEnded);
             reader.Start();
             worker.DoWork += new DoWorkEventHandler(WorkerTick);
         }
 
-        private void NewUser(ProductionNode node, uint id)
+        private void NewUser(object sender, NewUserEventArgs e)
         {
-            userGenerator.GetPoseDetectionCap().StartPoseDetection(userGenerator.GetSkeletonCap().GetCalibrationPose(), id);
-            Console.Write(id + " Found new user");
+            userGenerator.PoseDetectionCapability.StartPoseDetection(userGenerator.SkeletonCapability.CalibrationPose, e.ID);
+            Console.Write(e.ID + " Found new user");
         }
 
-        private void LostUser(ProductionNode node, uint id)
+        private void LostUser(object sender, UserLostEventArgs e)
         {
-            Console.Write(id + " Lost user");
+            Console.Write(e.ID + " Lost user");
         }
 
-        private void CalibrationStart(ProductionNode node, uint id)
+        private void CalibrationStart(object sender, CalibrationStartEventArgs e)
         {
-            Console.Write(id + " Calibration start");
+            Console.Write(e.ID + " Calibration start");
         }
 
-        private void CalibrationEnd(ProductionNode node, uint id, bool success)
+        private void CalibrationEnd(object sender, CalibrationEndEventArgs e)
         {
-            Console.Write(id + " Calibration ended " + (success ? "successfully" : "unsuccessfully"));
-            if (success)
+            Console.Write(e.ID + " Calibration ended " + (e.Success ? "successfully" : "unsuccessfully"));
+            if (e.Success)
             {
-                userGenerator.GetSkeletonCap().StartTracking(id);
+                userGenerator.SkeletonCapability.StartTracking(e.ID);
             }
             else
             {
-                userGenerator.GetPoseDetectionCap().StartPoseDetection(userGenerator.GetSkeletonCap().GetCalibrationPose(), id);
+                userGenerator.PoseDetectionCapability.StartPoseDetection(userGenerator.SkeletonCapability.CalibrationPose, e.ID);
             }
         }
 
-        private void PoseDetected(ProductionNode node, string pose, uint id)
+        private void PoseDetected(object sender, PoseDetectedEventArgs e)
         {
-            Console.Write(id + " Detected pose " + pose);
-            userGenerator.GetPoseDetectionCap().StopPoseDetection(id);
-            userGenerator.GetSkeletonCap().RequestCalibration(id, false);
+            Console.Write(e.ID + " Detected pose " + e.Pose);
+            userGenerator.PoseDetectionCapability.StopPoseDetection(e.ID);
+            userGenerator.SkeletonCapability.RequestCalibration(e.ID, false);
         }
 
-        private void PoseEnded(ProductionNode node, string pose, uint id)
+        private void PoseEnded(object sender, PoseEndedEventArgs e)
         {
-            Console.Write(id + " Lost Pose " + pose);
+            Console.Write(e.ID + " Lost Pose " + e.Pose);
         }
 
         private void Reader()
@@ -242,7 +241,7 @@ namespace TrackingNI
 
                     unsafe
                     {
-                        ushort* pDepth = (ushort*)depthGenerator.GetDepthMapPtr().ToPointer();
+                        ushort* pDepth = (ushort*)depthGenerator.DepthMapPtr.ToPointer();
                         for (int y = 0; y < depthData.YRes; ++y)
                         {
                             byte* pDest = (byte*)depthBitmap.BackBuffer.ToPointer() + y * depthBitmap.BackBufferStride;
@@ -280,7 +279,7 @@ namespace TrackingNI
 
                     unsafe
                     {
-                        ushort* pDepth = (ushort*)depthGenerator.GetDepthMapPtr().ToPointer();
+                        ushort* pDepth = (ushort*)depthGenerator.DepthMapPtr.ToPointer();
                         for (int y = 0; y < depthData.YRes; ++y)
                         {
                             byte* pDest = (byte*)depthBitmapCorrected.BackBuffer.ToPointer() + y * depthBitmapCorrected.BackBufferStride;
